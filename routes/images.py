@@ -10,6 +10,9 @@ from dsp.pipeline import apply_pipeline
 from dsp.vignette import apply_vignette
 from dsp.edges import apply_edges
 from dsp.freq import apply_lowpass_fft, apply_highpass_fft
+from dsp.dct import apply_dct_jpeg, apply_dct_keep  # NEW
+
+
 
 bp = Blueprint("images", __name__)
 
@@ -257,6 +260,45 @@ def apply_edges_route():
                      mimetype="image/png",
                      as_attachment=False, download_name="preview.png")
 
+
+@bp.post("/apply/dct")
+def apply_dct_route():
+    data = request.get_json(silent=True) or {}
+    filename = data.get("filename")
+
+    if not filename or not allowed(filename, current_app.config["ALLOWED_EXTS"]):
+        return "Invalid filename", 400
+
+    src_path = os.path.join(current_app.config["UPLOAD_DIR"], filename)
+    if not os.path.exists(src_path):
+        return "File not found", 404
+
+    method = (data.get("method") or "jpeg").lower()   # 'jpeg' | 'zigzag' | 'topk'
+    quality = int(float(data.get("quality", 75)))     # 1..100
+    keep    = float(data.get("keep", 0.125))          # 0..1
+    block   = int(float(data.get("block", 8)))        # e.g., 8 or 16
+
+    pil_img = Image.open(src_path)
+    np_rgb = to_numpy_rgb(pil_img)
+
+    if method == "jpeg":
+        out_np = apply_dct_jpeg(np_rgb, quality=quality, block=8)  # JPEG = 8x8
+    else:
+        mode = "zigzag" if method == "zigzag" else "topk"
+        out_np = apply_dct_keep(np_rgb, keep=max(0.01, min(1.0, keep)), block=block, mode=mode)
+
+    return send_file(pil_to_bytes(to_pil(out_np), fmt="PNG"),
+                     mimetype="image/png",
+                     as_attachment=False,
+                     download_name="preview.png")
+
+
+
+
+
+
+
+
 # -------- SAVE (generic) --------
 
 
@@ -358,6 +400,22 @@ def save_result():
         if vs is not None: parts.append(f"v{float(vs):.2f}")  # <-- ADD
         suffix = "pipeline_" + ("_".join(parts) if parts else "noop")
 
+    elif op == "dct":
+        method = (data.get("method") or "jpeg").lower()   # 'jpeg' | 'zigzag' | 'topk'
+        quality = int(float(data.get("quality", 75)))     # 1..100
+        keep    = float(data.get("keep", 0.125))          # 0..1
+        block   = int(float(data.get("block", 8)))        # 8/16...
+
+        if method == "jpeg":
+            out_np = apply_dct_jpeg(np_rgb, quality=quality, block=8)
+            suffix = f"dct_jpeg_q{quality}"
+        else:
+            mode = "zigzag" if method == "zigzag" else "topk"
+            keep = max(0.01, min(1.0, keep))
+            out_np = apply_dct_keep(np_rgb, keep=keep, block=block, mode=mode)
+            suffix = f"dct_{mode}_k{keep:.2f}_b{block}"
+
+    
     else:
         return "Unknown op", 400
 

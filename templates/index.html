@@ -1,594 +1,663 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-
-<head>
+  <head>
     <meta charset="utf-8" />
     <title>MORPH – DSP Playground</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-        body {
-            font-family: system-ui, sans-serif;
-            margin: 24px;
-        }
-
-        .panel {
-            max-width: 960px;
-            margin: 0 auto;
-            display: grid;
-        }
-
-        .row {
-            display: grid;
-            gap: 12px;
-            grid-template-columns: 1fr;
-        }
-
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 24px;
+      }
+      
+      .panel {
+        max-width: 960px;
+        margin: 0 auto;
+        display: grid;
+      }
+      
+      .row {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: 1fr;
+      }
+      
+      .canvas {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      
+      img {
+        width: 100%;
+        height: auto;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+      }
+      
+      .controls {
+        display: grid;
+        gap: 8px;
+      }
+      
+      input[type='range'] {
+        width: 100%;
+      }
+      
+      .btn {
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        background: #f7f7f7;
+        cursor: pointer;
+      }
+      
+      .btn.active {
+        background: #e8f0fe;
+        border-color: #6c8cff;
+      }
+      
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      
+      .hint {
+        color: #666;
+        font-size: 0.9rem;
+      }
+      
+      .hidden {
+        display: none;
+      }
+      
+      @media (max-width: 900px) {
         .canvas {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
+          grid-template-columns: 1fr;
         }
-
-        img {
-            width: 100%;
-            height: auto;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-        }
-
-        .controls {
-            display: grid;
-            gap: 8px;
-        }
-
-        input[type="range"] {
-            width: 100%;
-        }
-
-        .btn {
-            padding: 10px 14px;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            background: #f7f7f7;
-            cursor: pointer;
-        }
-
-        .btn.active {
-            background: #e8f0fe;
-            border-color: #6c8cff;
-        }
-
-        .btn:disabled {
-            opacity: .5;
-            cursor: not-allowed;
-        }
-
-        .toolbar {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .hint {
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        @media (max-width: 900px) {
-            .canvas {
-                grid-template-columns: 1fr;
-            }
-        }
+      }
     </style>
-</head>
+  </head>
 
-<body>
+  <body>
     <div class="panel">
-        <h2>MORPH: Image Manipulation through Fourier & Spatial Domains</h2>
+      <h2>MORPH: Image Manipulation through Fourier & Spatial Domains</h2>
 
-        <div class="row">
-            <div class="controls">
-                <label>
-                    Upload an image (png/jpg/jpeg):
-                    <input id="file" type="file" accept="image/png,image/jpeg,image/webp" />
-                </label>
-                <div class="hint"></div>
-            </div>
+      <div class="row">
+        <div class="controls">
+          <label>Upload an image (png/jpg/jpeg):<input id="file" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+          <div class="hint"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="toolbar">
+          <button class="btn active" id="mode-grayscale">Grayscale</button>
+          <button class="btn" id="mode-brightness">Brightness</button>
+          <button class="btn" id="mode-contrast">Contrast</button>
+          <button class="btn" id="mode-vignette">Vignette</button>
+          <button class="btn" id="mode-blur">Blur</button>
+          <button class="btn" id="mode-edges">Edges</button>
+          <button class="btn" id="mode-lowpass">Low-Pass</button>
+          <button class="btn" id="mode-highpass">High-Pass</button>
+          <button class="btn" id="mode-hybrid">Hybrid</button>
+          <button class="btn" id="mode-dct">DCT Compress</button>
+        </div>
+      </div>
+
+      <div class="row canvas">
+        <div>
+          <h3>Original</h3>
+          <img id="orig" alt="original" />
+        </div>
+        <div>
+          <h3>Preview</h3>
+          <img id="preview" alt="preview" />
+        </div>
+      </div>
+
+      <!-- Per-mode controls -->
+      <div class="row">
+        <!-- Grayscale -->
+        <div id="ctrl-grayscale" class="controls">
+          <label>Grayscale Strength: <span id="gLabel">100</span>%</label>
+          <input id="gSlider" type="range" min="0" max="100" step="1" value="100" />
         </div>
 
-        <div class="row">
-            <div class="toolbar">
-                <button class="btn active" id="mode-grayscale">Grayscale</button>
-                <button class="btn" id="mode-brightness">Brightness</button>
-                <button class="btn" id="mode-contrast">Contrast</button>
-                <button class="btn" id="mode-vignette">Vignette</button>
-                <button class="btn" id="mode-blur">Blur</button>
-                <button class="btn" id="mode-edges">Edges</button>
-                <button class="btn" id="mode-lowpass">Low-Pass</button>
-                <button class="btn" id="mode-highpass">High-Pass</button>
-                <button class="btn" id="mode-hybrid">Hybrid</button>
-
-            </div>
+        <!-- Brightness -->
+        <div id="ctrl-brightness" class="controls hidden">
+          <label>Brightness: <span id="bLabel">0</span></label>
+          <input id="bSlider" type="range" min="-100" max="100" step="1" value="0" />
+          <div class="hint">Shifts intensity up/down (beta). Range [-100..100].</div>
         </div>
 
-        <div class="row canvas">
-            <div>
-                <h3>Original</h3>
-                <img id="orig" alt="original" />
-            </div>
-            <div>
-                <h3>Preview</h3>
-                <img id="preview" alt="preview" />
-            </div>
+        <!-- Contrast -->
+        <div id="ctrl-contrast" class="controls hidden">
+          <label>Contrast: <span id="cLabel">0</span></label>
+          <input id="cSlider" type="range" min="-100" max="100" step="1" value="0" />
+          <div class="hint">Scales around mid-gray (alpha). Range [-100..100].</div>
         </div>
 
-        <!-- Per-mode controls -->
-        <div class="row">
-            <!-- Grayscale -->
-            <div id="ctrl-grayscale" class="controls">
-                <label>Grayscale Strength: <span id="gLabel">100</span>%</label>
-                <input id="gSlider" type="range" min="0" max="100" step="1" value="100" />
-            </div>
-
-            <!-- Brightness -->
-            <div id="ctrl-brightness" class="controls hidden">
-                <label>Brightness: <span id="bLabel">0</span></label>
-                <input id="bSlider" type="range" min="-100" max="100" step="1" value="0" />
-                <div class="hint">Shifts intensity up/down (beta). Range [-100..100].</div>
-            </div>
-
-            <!-- Contrast -->
-            <div id="ctrl-contrast" class="controls hidden">
-                <label>Contrast: <span id="cLabel">0</span></label>
-                <input id="cSlider" type="range" min="-100" max="100" step="1" value="0" />
-                <div class="hint">Scales around mid-gray (alpha). Range [-100..100].</div>
-            </div>
-
-            <!-- Blur -->
-            <div id="ctrl-blur" class="controls hidden">
-                <label>Blur Sigma: <span id="sLabel">0.0</span></label>
-                <input id="sSlider" type="range" min="0" max="5" step="0.1" value="0" />
-                <div class="hint">Higher sigma → stronger Gaussian blur (separable conv).</div>
-            </div>
-
-            <!-- Vignette -->
-            <div id="ctrl-vignette" class="controls hidden">
-                <label>Vignette Strength: <span id="vLabel">0.5</span></label>
-                <input id="vSlider" type="range" min="0" max="1" step="0.01" value="0.5" />
-                <div class="hint">0 = none, 1 = strong vignette</div>
-            </div>
-
-            <!-- Edges -->
-            <div id="ctrl-edges" class="controls hidden">
-                <label>Type:
-                    <select id="eKind">
-                        <option value="sobel" selected>Sobel</option>
-                        <option value="prewitt">Prewitt</option>
-                        <option value="laplacian">Laplacian</option>
-                    </select>
-                </label>
-
-                <label>Threshold: <span id="eTLabel">100</span></label>
-                <input id="eTSlider" type="range" min="0" max="255" step="1" value="100" />
-
-                <label>Pre-smooth sigma: <span id="eSLabel">1.0</span></label>
-                <input id="eSSlider" type="range" min="0" max="2" step="0.1" value="1.0" />
-
-                <label style="display:flex; align-items:center; gap:8px;">
-                    <input id="eOverlay" type="checkbox" checked />
-                    Overlay on image
-                </label>
-
-                <label>Overlay alpha: <span id="eALabel">0.6</span></label>
-                <input id="eASlider" type="range" min="0" max="1" step="0.05" value="0.6" />
-
-                <label>Edge color:
-                    <input id="eColor" type="color" value="#ff4040" />
-                </label>
-
-                <div class="hint">
-                    Sobel/Prewitt use first derivatives; Laplacian is second-derivative (sharper but noisier).
-                    Pre-smooth helps reduce noise before edge detection.
-                </div>
-            </div>
-
-            <!-- Low-Pass -->
-            <div id="ctrl-lowpass" class="controls hidden">
-                <label>Cutoff (0.01–0.5): <span id="lpfCutLabel">0.15</span></label>
-                <input id="lpfCutSlider" type="range" min="0.01" max="0.5" step="0.01" value="0.15" />
-                <div class="hint">Smaller cutoff ⇒ stronger blur (more low frequencies only).</div>
-            </div>
-
-            <!-- High-Pass / High-boost -->
-            <div id="ctrl-highpass" class="controls hidden">
-                <label>Cutoff (0.01–0.5): <span id="hpfCutLabel">0.15</span></label>
-                <input id="hpfCutSlider" type="range" min="0.01" max="0.5" step="0.01" value="0.15" />
-
-                <label>High-boost (0.0–1.5): <span id="hpfBoostLabel">0.00</span></label>
-                <input id="hpfBoostSlider" type="range" min="0" max="1.5" step="0.05" value="0.0" />
-
-                <div class="hint">High-boost 0 = pure high-pass map (looks gray/edgy). &gt; 0 = sharpen (I + k·HPF).
-                </div>
-            </div>
-
-
-
-            <!-- Hybrid (all together) -->
-            <div id="ctrl-hybrid" class="controls hidden">
-                <label>Grayscale Strength: <span id="hgLabel">0</span>%</label>
-                <input id="hgSlider" type="range" min="0" max="100" step="1" value="0" />
-                <label style="margin-top:6px;">Blur Sigma: <span id="hsLabel">0.0</span></label>
-                <input id="hsSlider" type="range" min="0" max="5" step="0.1" value="0" />
-                <label style="margin-top:6px;">Brightness: <span id="hbLabel">0</span></label>
-                <input id="hbSlider" type="range" min="-100" max="100" step="1" value="0" />
-                <label style="margin-top:6px;">Contrast: <span id="hcLabel">0</span></label>
-                <input id="hcSlider" type="range" min="-100" max="100" step="1" value="0" />
-                <label style="margin-top:6px;">Vignette Strength: <span id="hvLabel">0.0</span></label>
-                <input id="hvSlider" type="range" min="0" max="1" step="0.01" value="0" />
-            </div>
-
-
-            <div style="display:flex; gap:8px;">
-                <button id="resetBtn" class="btn" disabled>Reset</button>
-                <button id="saveBtn" class="btn" disabled>Save Edited Image</button>
-                <a id="downloadLink" class="btn" style="display:none;" download>Download</a>
-            </div>
+        <!-- Blur -->
+        <div id="ctrl-blur" class="controls hidden">
+          <label>Blur Sigma: <span id="sLabel">0.0</span></label>
+          <input id="sSlider" type="range" min="0" max="5" step="0.1" value="0" />
+          <div class="hint">Higher sigma → stronger Gaussian blur (separable conv).</div>
         </div>
 
+        <!-- Vignette -->
+        <div id="ctrl-vignette" class="controls hidden">
+          <label>Vignette Strength: <span id="vLabel">0.5</span></label>
+          <input id="vSlider" type="range" min="0" max="1" step="0.01" value="0.5" />
+          <div class="hint">0 = none, 1 = strong vignette</div>
+        </div>
+
+        <!-- Edges -->
+        <div id="ctrl-edges" class="controls hidden">
+          <label>
+            Type:<select id="eKind">
+              <option value="sobel" selected>Sobel</option>
+              <option value="prewitt">Prewitt</option>
+              <option value="laplacian">Laplacian</option>
+            </select>
+          </label>
+
+          <label>Threshold: <span id="eTLabel">100</span></label>
+          <input id="eTSlider" type="range" min="0" max="255" step="1" value="100" />
+
+          <label>Pre-smooth sigma: <span id="eSLabel">1.0</span></label>
+          <input id="eSSlider" type="range" min="0" max="2" step="0.1" value="1.0" />
+
+          <label style="display:flex; align-items:center; gap:8px;"><input id="eOverlay" type="checkbox" checked />Overlay on image</label>
+
+          <label>Overlay alpha: <span id="eALabel">0.6</span></label>
+          <input id="eASlider" type="range" min="0" max="1" step="0.05" value="0.6" />
+
+          <label>Edge color:<input id="eColor" type="color" value="#ff4040" /></label>
+
+          <div class="hint">Sobel/Prewitt use first derivatives; Laplacian is second-derivative (sharper but noisier). Pre-smooth helps reduce noise before edge detection.</div>
+        </div>
+
+        <!-- Low-Pass -->
+        <div id="ctrl-lowpass" class="controls hidden">
+          <label>Cutoff (0.01–0.5): <span id="lpfCutLabel">0.15</span></label>
+          <input id="lpfCutSlider" type="range" min="0.01" max="0.5" step="0.01" value="0.15" />
+          <div class="hint">Smaller cutoff ⇒ stronger blur (more low frequencies only).</div>
+        </div>
+
+        <!-- High-Pass / High-boost -->
+        <div id="ctrl-highpass" class="controls hidden">
+          <label>Cutoff (0.01–0.5): <span id="hpfCutLabel">0.15</span></label>
+          <input id="hpfCutSlider" type="range" min="0.01" max="0.5" step="0.01" value="0.15" />
+
+          <label>High-boost (0.0–1.5): <span id="hpfBoostLabel">0.00</span></label>
+          <input id="hpfBoostSlider" type="range" min="0" max="1.5" step="0.05" value="0.0" />
+
+          <div class="hint">High-boost 0 = pure high-pass map (looks gray/edgy). &gt; 0 = sharpen (I + k·HPF).</div>
+        </div>
+
+        <!-- Hybrid (all together) -->
+        <div id="ctrl-hybrid" class="controls hidden">
+          <label>Grayscale Strength: <span id="hgLabel">0</span>%</label>
+          <input id="hgSlider" type="range" min="0" max="100" step="1" value="0" />
+          <label style="margin-top:6px;">Blur Sigma: <span id="hsLabel">0.0</span></label>
+          <input id="hsSlider" type="range" min="0" max="5" step="0.1" value="0" />
+          <label style="margin-top:6px;">Brightness: <span id="hbLabel">0</span></label>
+          <input id="hbSlider" type="range" min="-100" max="100" step="1" value="0" />
+          <label style="margin-top:6px;">Contrast: <span id="hcLabel">0</span></label>
+          <input id="hcSlider" type="range" min="-100" max="100" step="1" value="0" />
+          <label style="margin-top:6px;">Vignette Strength: <span id="hvLabel">0.0</span></label>
+          <input id="hvSlider" type="range" min="0" max="1" step="0.01" value="0" />
+        </div>
+
+        <!-- DCT Compression -->
+        <div id="ctrl-dct" class="controls hidden">
+          <label>
+            Method:<select id="dctMethod">
+              <option value="jpeg" selected>JPEG (quality 1–100)</option>
+              <option value="zigzag">Keep low frequencies (zigzag)</option>
+              <option value="topk">Keep top-|coeff| (magnitude)</option>
+            </select>
+          </label>
+
+          <div id="dctQualWrap">
+            <label>Quality: <span id="dctQualLabel">75</span></label>
+            <input id="dctQualSlider" type="range" min="1" max="100" step="1" value="75" />
+          </div>
+
+          <div id="dctKeepWrap" class="hidden">
+            <label>Keep fraction of coeffs: <span id="dctKeepLabel">0.12</span></label>
+            <input id="dctKeepSlider" type="range" min="0.01" max="1.0" step="0.01" value="0.12" />
+            <label>
+              Block size:<select id="dctBlock">
+                <option value="8" selected>8 × 8</option>
+                <option value="16">16 × 16</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="hint">
+            JPEG uses 8×8 DCT with quantization tables (classic).<br />
+            Zigzag keeps low-frequency coefficients; Top-k keeps the largest magnitudes.
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <button id="resetBtn" class="btn" disabled>Reset</button>
+          <button id="saveBtn" class="btn" disabled>Save Edited Image</button>
+          <a id="downloadLink" class="btn" style="display:none;" download>Download</a>
+        </div>
+      </div>
     </div>
 
-    <script>
+<script>
+  function hexToRGB(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+    if (!m) return [255, 64, 64]
+    return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)]
+  }
 
-        function hexToRGB(hex) {
-            const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            if (!m) return [255, 64, 64];
-            return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+  const fileInput = document.getElementById('file')
+  const origImg = document.getElementById('orig')
+  const preview = document.getElementById('preview')
+
+  const modeBtns = {
+    grayscale: document.getElementById('mode-grayscale'),
+    brightness: document.getElementById('mode-brightness'),
+    contrast: document.getElementById('mode-contrast'),
+    blur: document.getElementById('mode-blur'),
+    hybrid: document.getElementById('mode-hybrid'),
+    vignette: document.getElementById('mode-vignette'),
+    edges: document.getElementById('mode-edges'),
+    lowpass: document.getElementById('mode-lowpass'),
+    highpass: document.getElementById('mode-highpass'),
+    dct: document.getElementById('mode-dct')   // define DCT here (before use)
+  }
+
+  const gCtrl = document.getElementById('ctrl-grayscale')
+  const bCtrl = document.getElementById('ctrl-brightness')
+  const cCtrl = document.getElementById('ctrl-contrast')
+  const sCtrl = document.getElementById('ctrl-blur')
+  const hCtrl = document.getElementById('ctrl-hybrid')
+  const vCtrl = document.getElementById('ctrl-vignette')
+  const eCtrl = document.getElementById('ctrl-edges')
+
+  const gSlider = document.getElementById('gSlider')
+  const bSlider = document.getElementById('bSlider')
+  const cSlider = document.getElementById('cSlider')
+  const sSlider = document.getElementById('sSlider')
+  const vSlider = document.getElementById('vSlider')
+
+  const gLabel = document.getElementById('gLabel')
+  const bLabel = document.getElementById('bLabel')
+  const cLabel = document.getElementById('cLabel')
+  const sLabel = document.getElementById('sLabel')
+  const vLabel = document.getElementById('vLabel')
+
+  // Hybrid sliders + labels
+  const hgSlider = document.getElementById('hgSlider')
+  const hsSlider = document.getElementById('hsSlider')
+  const hbSlider = document.getElementById('hbSlider')
+  const hcSlider = document.getElementById('hcSlider')
+  const hvSlider = document.getElementById('hvSlider')
+
+  const hgLabel = document.getElementById('hgLabel')
+  const hsLabel = document.getElementById('hsLabel')
+  const hbLabel = document.getElementById('hbLabel')
+  const hcLabel = document.getElementById('hcLabel')
+  const hvLabel = document.getElementById('hvLabel')
+
+  const eKind = document.getElementById('eKind')
+  const eTSlider = document.getElementById('eTSlider')
+  const eSSlider = document.getElementById('eSSlider')
+  const eOverlay = document.getElementById('eOverlay')
+  const eASlider = document.getElementById('eASlider')
+  const eColor = document.getElementById('eColor')
+
+  const eTLabel = document.getElementById('eTLabel')
+  const eSLabel = document.getElementById('eSLabel')
+  const eALabel = document.getElementById('eALabel')
+
+  const lpfCtrl = document.getElementById('ctrl-lowpass')
+  const hpfCtrl = document.getElementById('ctrl-highpass')
+
+  const lpfCutSlider = document.getElementById('lpfCutSlider')
+  const lpfCutLabel = document.getElementById('lpfCutLabel')
+
+  const hpfCutSlider = document.getElementById('hpfCutSlider')
+  const hpfCutLabel = document.getElementById('hpfCutLabel')
+  const hpfBoostSlider = document.getElementById('hpfBoostSlider')
+  const hpfBoostLabel = document.getElementById('hpfBoostLabel')
+
+  const resetBtn = document.getElementById('resetBtn')
+  const saveBtn = document.getElementById('saveBtn')
+  const dlLink = document.getElementById('downloadLink')
+
+  // --- DCT controls ---
+  const dctCtrl = document.getElementById('ctrl-dct')
+  const dctMethod = document.getElementById('dctMethod')
+  const dctQualWrap = document.getElementById('dctQualWrap')
+  const dctQualSlider = document.getElementById('dctQualSlider')
+  const dctQualLabel = document.getElementById('dctQualLabel')
+
+  const dctKeepWrap = document.getElementById('dctKeepWrap')
+  const dctKeepSlider = document.getElementById('dctKeepSlider')
+  const dctKeepLabel = document.getElementById('dctKeepLabel')
+  const dctBlock = document.getElementById('dctBlock')
+
+  let uploadedFilename = null
+  let mode = 'grayscale'
+
+  function setMode(newMode) {
+    mode = newMode
+    for (const [m, btn] of Object.entries(modeBtns)) {
+      btn.classList.toggle('active', m === mode)
+    }
+    gCtrl.classList.toggle('hidden', mode !== 'grayscale')
+    bCtrl.classList.toggle('hidden', mode !== 'brightness')
+    cCtrl.classList.toggle('hidden', mode !== 'contrast')
+    sCtrl.classList.toggle('hidden', mode !== 'blur')
+    hCtrl.classList.toggle('hidden', mode !== 'hybrid')
+    vCtrl.classList.toggle('hidden', mode !== 'vignette')
+    eCtrl.classList.toggle('hidden', mode !== 'edges')
+    lpfCtrl.classList.toggle('hidden', mode !== 'lowpass')
+    hpfCtrl.classList.toggle('hidden', mode !== 'highpass')
+    dctCtrl.classList.toggle('hidden', mode !== 'dct') // show/hide DCT
+
+    updatePreview()
+  }
+
+  function setDefaults() {
+    // single-op defaults
+    gSlider.value = 100; gLabel.textContent = '100'
+    bSlider.value = 0;   bLabel.textContent = '0'
+    cSlider.value = 0;   cLabel.textContent = '0'
+    sSlider.value = 0;   sLabel.textContent = '0.0'
+    vSlider.value = 0.5; vLabel.textContent = '0.5'
+
+    // hybrid defaults (neutral)
+    hgSlider.value = 0; hgLabel.textContent = '0'
+    hsSlider.value = 0; hsLabel.textContent = '0.0'
+    hbSlider.value = 0; hbLabel.textContent = '0'
+    hcSlider.value = 0; hcLabel.textContent = '0'
+    hvSlider.value = 0; hvLabel.textContent = '0.0'
+
+    // edges defaults
+    eKind.value = 'sobel'
+    eTSlider.value = 100; eTLabel.textContent = '100'
+    eSSlider.value = 1.0; eSLabel.textContent = '1.0'
+    eOverlay.checked = true
+    eASlider.value = 0.6; eALabel.textContent = '0.6'
+    eColor.value = '#ff4040'
+
+    // lpf/hpf defaults
+    lpfCutSlider.value = 0.15; lpfCutLabel.textContent = '0.15'
+    hpfCutSlider.value = 0.15; hpfCutLabel.textContent = '0.15'
+    hpfBoostSlider.value = 0.0; hpfBoostLabel.textContent = '0.00'
+
+    // DCT defaults
+    dctMethod.value = 'jpeg'
+    dctQualSlider.value = 75; dctQualLabel.textContent = '75'
+    dctKeepSlider.value = 0.12; dctKeepLabel.textContent = '0.12'
+    dctBlock.value = '8'
+    dctQualWrap.classList.remove('hidden')
+    dctKeepWrap.classList.add('hidden')
+  }
+
+  async function postJSON(url, payload) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    if (!res.ok) throw new Error(await res.text())
+    return res
+  }
+
+  async function updatePreview() {
+    if (!uploadedFilename) return
+
+    let endpoint = ''
+    let payload = { filename: uploadedFilename }
+
+    try {
+      if (mode === 'grayscale') {
+        gLabel.textContent = gSlider.value
+        endpoint = '/apply/grayscale'
+        payload.strength = parseInt(gSlider.value, 10)
+
+      } else if (mode === 'brightness') {
+        bLabel.textContent = bSlider.value
+        endpoint = '/apply/brightness'
+        payload.brightness = parseInt(bSlider.value, 10)
+
+      } else if (mode === 'contrast') {
+        cLabel.textContent = cSlider.value
+        endpoint = '/apply/contrast'
+        payload.contrast = parseInt(cSlider.value, 10)
+
+      } else if (mode === 'blur') {
+        sLabel.textContent = sSlider.value
+        endpoint = '/apply/blur'
+        payload.sigma = parseFloat(sSlider.value)
+
+      } else if (mode === 'vignette') {
+        vLabel.textContent = vSlider.value
+        endpoint = '/apply/vignette'
+        payload.strength = parseFloat(vSlider.value)
+
+      } else if (mode === 'hybrid') {
+        hgLabel.textContent = hgSlider.value
+        hsLabel.textContent = hsSlider.value
+        hbLabel.textContent = hbSlider.value
+        hcLabel.textContent = hcSlider.value
+        hvLabel.textContent = hvSlider.value
+
+        endpoint = '/apply/pipeline'
+        payload.grayscale_strength = parseInt(hgSlider.value, 10)
+        payload.blur_sigma = parseFloat(hsSlider.value)
+        payload.brightness = parseInt(hbSlider.value, 10)
+        payload.contrast = parseInt(hcSlider.value, 10)
+        payload.vignette_strength = parseFloat(hvSlider.value)
+
+      } else if (mode === 'lowpass') {
+        lpfCutLabel.textContent = Number(lpfCutSlider.value).toFixed(2)
+        endpoint = '/apply/lowpass'
+        payload.cutoff = parseFloat(lpfCutSlider.value)
+
+      } else if (mode === 'highpass') {
+        hpfCutLabel.textContent = Number(hpfCutSlider.value).toFixed(2)
+        hpfBoostLabel.textContent = Number(hpfBoostSlider.value).toFixed(2)
+        endpoint = '/apply/highpass'
+        payload.cutoff = parseFloat(hpfCutSlider.value)
+        payload.highboost = parseFloat(hpfBoostSlider.value)
+
+      } else if (mode === 'edges') {
+        eTLabel.textContent = eTSlider.value
+        eSLabel.textContent = eSSlider.value
+        eALabel.textContent = eASlider.value
+
+        endpoint = '/apply/edges'
+        payload.kind = eKind.value                     // 'sobel' | 'prewitt' | 'laplacian'
+        payload.threshold = parseInt(eTSlider.value, 10)   // 0..255
+        payload.smooth_sigma = parseFloat(eSSlider.value)  // 0..2
+        payload.overlay = !!eOverlay.checked               // bool
+        payload.overlay_alpha = parseFloat(eASlider.value) // 0..1
+        payload.overlay_color = hexToRGB(eColor.value)     // [r,g,b]
+
+      } else if (mode === 'dct') {
+        const m = dctMethod.value
+        dctQualLabel.textContent = dctQualSlider.value
+        dctKeepLabel.textContent = Number(dctKeepSlider.value).toFixed(2)
+
+        endpoint = '/apply/dct'
+        payload.method = m
+        if (m === 'jpeg') {
+          payload.quality = parseInt(dctQualSlider.value, 10)
+        } else {
+          payload.keep = parseFloat(dctKeepSlider.value)
+          payload.block = parseInt(dctBlock.value, 10)
         }
-
-        const fileInput = document.getElementById('file');
-        const origImg = document.getElementById('orig');
-        const preview = document.getElementById('preview');
-
-        const modeBtns = {
-            grayscale: document.getElementById('mode-grayscale'),
-            brightness: document.getElementById('mode-brightness'),
-            contrast: document.getElementById('mode-contrast'),
-            blur: document.getElementById('mode-blur'),
-            hybrid: document.getElementById('mode-hybrid'),
-            vignette: document.getElementById('mode-vignette'),
-            edges: document.getElementById('mode-edges'),
-            lowpass: document.getElementById('mode-lowpass'),
-            highpass: document.getElementById('mode-highpass'),
-
-        };
-
-        const gCtrl = document.getElementById('ctrl-grayscale');
-        const bCtrl = document.getElementById('ctrl-brightness');
-        const cCtrl = document.getElementById('ctrl-contrast');
-        const sCtrl = document.getElementById('ctrl-blur');
-        const hCtrl = document.getElementById('ctrl-hybrid');
-        const vCtrl = document.getElementById('ctrl-vignette');
-        const eCtrl = document.getElementById('ctrl-edges');
-
-        const gSlider = document.getElementById('gSlider');
-        const bSlider = document.getElementById('bSlider');
-        const cSlider = document.getElementById('cSlider');
-        const sSlider = document.getElementById('sSlider');
-        const vSlider = document.getElementById('vSlider');
-
-        const gLabel = document.getElementById('gLabel');
-        const bLabel = document.getElementById('bLabel');
-        const cLabel = document.getElementById('cLabel');
-        const sLabel = document.getElementById('sLabel');
-        const vLabel = document.getElementById('vLabel');
-
-        // Hybrid sliders + labels (these were missing)
-        const hgSlider = document.getElementById('hgSlider');
-        const hsSlider = document.getElementById('hsSlider');
-        const hbSlider = document.getElementById('hbSlider');
-        const hcSlider = document.getElementById('hcSlider');
-        const hvSlider = document.getElementById('hvSlider');
-
-        const hgLabel = document.getElementById('hgLabel');
-        const hsLabel = document.getElementById('hsLabel');
-        const hbLabel = document.getElementById('hbLabel');
-        const hcLabel = document.getElementById('hcLabel');
-        const hvLabel = document.getElementById('hvLabel');
-
-        const eKind = document.getElementById('eKind');
-        const eTSlider = document.getElementById('eTSlider');
-        const eSSlider = document.getElementById('eSSlider');
-        const eOverlay = document.getElementById('eOverlay');
-        const eASlider = document.getElementById('eASlider');
-        const eColor = document.getElementById('eColor');
-
-        const eTLabel = document.getElementById('eTLabel');
-        const eSLabel = document.getElementById('eSLabel');
-        const eALabel = document.getElementById('eALabel');
-
-        const lpfCtrl = document.getElementById('ctrl-lowpass');
-        const hpfCtrl = document.getElementById('ctrl-highpass');
-
-        const lpfCutSlider = document.getElementById('lpfCutSlider');
-        const lpfCutLabel = document.getElementById('lpfCutLabel');
-
-        const hpfCutSlider = document.getElementById('hpfCutSlider');
-        const hpfCutLabel = document.getElementById('hpfCutLabel');
-        const hpfBoostSlider = document.getElementById('hpfBoostSlider');
-        const hpfBoostLabel = document.getElementById('hpfBoostLabel');
-
-
-        const resetBtn = document.getElementById('resetBtn');
-        const saveBtn = document.getElementById('saveBtn');
-        const dlLink = document.getElementById('downloadLink');
-
-        let uploadedFilename = null;
-        let mode = 'grayscale';
-
-        function setMode(newMode) {
-            mode = newMode;
-            for (const [m, btn] of Object.entries(modeBtns)) {
-                btn.classList.toggle('active', m === mode);
-            }
-            gCtrl.classList.toggle('hidden', mode !== 'grayscale');
-            bCtrl.classList.toggle('hidden', mode !== 'brightness');
-            cCtrl.classList.toggle('hidden', mode !== 'contrast');
-            sCtrl.classList.toggle('hidden', mode !== 'blur');
-            hCtrl.classList.toggle('hidden', mode !== 'hybrid');
-            vCtrl.classList.toggle('hidden', mode !== 'vignette');
-            eCtrl.classList.toggle('hidden', mode !== 'edges');
-            lpfCtrl.classList.toggle('hidden', mode !== 'lowpass');
-            hpfCtrl.classList.toggle('hidden', mode !== 'highpass');
-
-            updatePreview();
-        }
-
-        function setDefaults() {
-            // single-op defaults
-            gSlider.value = 100; gLabel.textContent = '100';
-            bSlider.value = 0; bLabel.textContent = '0';
-            cSlider.value = 0; cLabel.textContent = '0';
-            sSlider.value = 0; sLabel.textContent = '0.0';
-            vSlider.value = 0.5; vLabel.textContent = '0.5';
-
-            // hybrid defaults (neutral pipeline)
-            hgSlider.value = 0; hgLabel.textContent = '0';
-            hsSlider.value = 0; hsLabel.textContent = '0.0';
-            hbSlider.value = 0; hbLabel.textContent = '0';
-            hcSlider.value = 0; hcLabel.textContent = '0';
-            hvSlider.value = 0; hvLabel.textContent = '0.0';
-
-            eKind.value = 'sobel';
-            eTSlider.value = 100; eTLabel.textContent = '100';
-            eSSlider.value = 1.0; eSLabel.textContent = '1.0';
-            eOverlay.checked = true;
-            eASlider.value = 0.6; eALabel.textContent = '0.6';
-            eColor.value = '#ff4040';
-
-            lpfCutSlider.value = 0.15; lpfCutLabel.textContent = '0.15';
-            hpfCutSlider.value = 0.15; hpfCutLabel.textContent = '0.15';
-            hpfBoostSlider.value = 0.0; hpfBoostLabel.textContent = '0.00';
-
-
-        }
-
-        async function postJSON(url, payload) {
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) throw new Error(await res.text());
-            return res;
-        }
-
-        async function updatePreview() {
-            if (!uploadedFilename) return;
-
-            let endpoint = '';
-            let payload = { filename: uploadedFilename };
-
-            try {
-                if (mode === 'grayscale') {
-                    gLabel.textContent = gSlider.value;
-                    endpoint = '/apply/grayscale';
-                    payload.strength = parseInt(gSlider.value, 10);
-
-                } else if (mode === 'brightness') {
-                    bLabel.textContent = bSlider.value;
-                    endpoint = '/apply/brightness';
-                    payload.brightness = parseInt(bSlider.value, 10);
-
-                } else if (mode === 'contrast') {
-                    cLabel.textContent = cSlider.value;
-                    endpoint = '/apply/contrast';
-                    payload.contrast = parseInt(cSlider.value, 10);
-
-                } else if (mode === 'blur') {
-                    sLabel.textContent = sSlider.value;
-                    endpoint = '/apply/blur';
-                    payload.sigma = parseFloat(sSlider.value);
-
-                } else if (mode === 'vignette') {
-                    vLabel.textContent = vSlider.value;
-                    endpoint = '/apply/vignette';
-                    payload.strength = parseFloat(vSlider.value);
-
-                } else if (mode === 'hybrid') {
-                    hgLabel.textContent = hgSlider.value;
-                    hsLabel.textContent = hsSlider.value;
-                    hbLabel.textContent = hbSlider.value;
-                    hcLabel.textContent = hcSlider.value;
-                    hvLabel.textContent = hvSlider.value;
-
-                    endpoint = '/apply/pipeline';
-                    payload.grayscale_strength = parseInt(hgSlider.value, 10);
-                    payload.blur_sigma = parseFloat(hsSlider.value);
-                    payload.brightness = parseInt(hbSlider.value, 10);
-                    payload.contrast = parseInt(hcSlider.value, 10);
-                    payload.vignette_strength = parseFloat(hvSlider.value);
-
-                }
-                else if (mode === 'lowpass') {
-                    lpfCutLabel.textContent = Number(lpfCutSlider.value).toFixed(2);
-                    endpoint = '/apply/lowpass';
-                    payload.cutoff = parseFloat(lpfCutSlider.value);
-
-                } else if (mode === 'highpass') {
-                    hpfCutLabel.textContent = Number(hpfCutSlider.value).toFixed(2);
-                    hpfBoostLabel.textContent = Number(hpfBoostSlider.value).toFixed(2);
-                    endpoint = '/apply/highpass';
-                    payload.cutoff = parseFloat(hpfCutSlider.value);
-                    payload.highboost = parseFloat(hpfBoostSlider.value);
-                }
-
-                else if (mode === 'edges') {
-                    eTLabel.textContent = eTSlider.value;
-                    eSLabel.textContent = eSSlider.value;
-                    eALabel.textContent = eASlider.value;
-
-                    endpoint = '/apply/edges';
-                    payload.kind = eKind.value;                         // 'sobel' | 'prewitt' | 'laplacian'
-                    payload.threshold = parseInt(eTSlider.value, 10);   // 0..255
-                    payload.smooth_sigma = parseFloat(eSSlider.value);  // 0..2
-                    payload.overlay = !!eOverlay.checked;               // bool
-                    payload.overlay_alpha = parseFloat(eASlider.value); // 0..1
-                    payload.overlay_color = hexToRGB(eColor.value);     // [r,g,b]
-                }
-
-                if (!endpoint) return; // safety
-
-                const res = await postJSON(endpoint, payload);
-                const blob = await res.blob();
-                preview.src = URL.createObjectURL(blob);
-
-            } catch (e) {
-                console.error('Preview failed:', e);
-            }
-        }
-
-
-        // Upload
-        fileInput.addEventListener('change', async (e) => {
-            dlLink.style.display = 'none';
-            saveBtn.disabled = true;
-            resetBtn.disabled = true;
-
-            const file = e.target.files[0];
-            if (!file) return;
-            const form = new FormData();
-            form.append('image', file);
-            const res = await fetch('/upload', { method: 'POST', body: form });
-            const data = await res.json();
-            if (!data.ok) { alert('Upload failed'); return; }
-
-            uploadedFilename = data.filename;
-            origImg.src = data.url;
-            setDefaults();
-            await updatePreview();
-            saveBtn.disabled = false;
-            resetBtn.disabled = false;
-        });
-
-        // ✅ Add listeners for ALL sliders (single-op + hybrid)
-        [
-            gSlider, bSlider, cSlider, sSlider, vSlider,
-            hgSlider, hsSlider, hbSlider, hcSlider, hvSlider
-        ].forEach(sl => sl.addEventListener('input', updatePreview));
-
-        // Slider/inputs live update
-        [eTSlider, eSSlider, eASlider, eColor].forEach(el => el.addEventListener('input', updatePreview));
-        // Select/checkbox change
-        [eKind, eOverlay].forEach(el => el.addEventListener('change', updatePreview));
-
-        // LPF/HPF sliders live-update
-        [lpfCutSlider, hpfCutSlider, hpfBoostSlider].forEach(el =>
-            el.addEventListener('input', updatePreview)
-        );
-
-
-        // Mode buttons
-        modeBtns.grayscale.addEventListener('click', () => setMode('grayscale'));
-        modeBtns.brightness.addEventListener('click', () => setMode('brightness'));
-        modeBtns.contrast.addEventListener('click', () => setMode('contrast'));
-        modeBtns.blur.addEventListener('click', () => setMode('blur'));
-        modeBtns.hybrid.addEventListener('click', () => setMode('hybrid'));
-        modeBtns.vignette.addEventListener('click', () => setMode('vignette'));
-        modeBtns.edges.addEventListener('click', () => setMode('edges'));
-        modeBtns.lowpass.addEventListener('click', () => setMode('lowpass'));
-        modeBtns.highpass.addEventListener('click', () => setMode('highpass'));
-
-
-
-
-
-        // Reset: neutralize and show original, switch to Hybrid (neutral)
-        resetBtn.addEventListener('click', () => {
-            if (!uploadedFilename) return;
-            setDefaults();
-            preview.src = origImg.src;
-            setMode('hybrid');
-        });
-
-        // Save
-        saveBtn.addEventListener('click', async () => {
-            if (!uploadedFilename) return;
-            let payload = { filename: uploadedFilename, op: mode };
-
-            if (mode === 'grayscale') payload.strength = parseInt(gSlider.value, 10);
-            else if (mode === 'brightness') payload.brightness = parseInt(bSlider.value, 10);
-            else if (mode === 'contrast') payload.contrast = parseInt(cSlider.value, 10);
-            else if (mode === 'blur') payload.sigma = parseFloat(sSlider.value);
-            else if (mode === 'vignette') { payload.op = 'vignette'; payload.strength = parseFloat(vSlider.value); }
-            else if (mode === 'edges') {
-                payload.op = 'edges';
-                payload.kind = eKind.value;
-                payload.threshold = parseInt(eTSlider.value, 10);
-                payload.smooth_sigma = parseFloat(eSSlider.value);
-                payload.overlay = !!eOverlay.checked;
-                payload.overlay_alpha = parseFloat(eASlider.value);
-                payload.overlay_color = hexToRGB(eColor.value);
-            }
-
-            else if (mode === 'lowpass') {
-                payload.op = 'lowpass';
-                payload.cutoff = parseFloat(lpfCutSlider.value);
-
-            } else if (mode === 'highpass') {
-                payload.op = 'highpass';
-                payload.cutoff = parseFloat(hpfCutSlider.value);
-                payload.highboost = parseFloat(hpfBoostSlider.value);
-            }
-
-
-            else if (mode === 'hybrid') {
-                payload.op = 'pipeline';
-                payload.grayscale_strength = parseInt(hgSlider.value, 10);
-                payload.blur_sigma = parseFloat(hsSlider.value);
-                payload.brightness = parseInt(hbSlider.value, 10);
-                payload.contrast = parseInt(hcSlider.value, 10);
-                payload.vignette_strength = parseFloat(hvSlider.value);
-            }
-
-            try {
-                const res = await postJSON('/save', payload);
-                const data = await res.json();
-                if (data.ok) {
-                    dlLink.href = data.result_url;
-                    dlLink.style.display = 'inline-block';
-                    dlLink.textContent = 'Download Edited Image';
-                }
-            } catch (e) {
-                console.error('Save failed:', e);
-            }
-        });
-
-        setDefaults();
-    </script>
-</body>
-
+      }
+
+      if (!endpoint) return // safety
+
+      const res = await postJSON(endpoint, payload)
+      const blob = await res.blob()
+      preview.src = URL.createObjectURL(blob)
+
+    } catch (e) {
+      console.error('Preview failed:', e)
+    }
+  }
+
+  // Upload
+  fileInput.addEventListener('change', async (e) => {
+    dlLink.style.display = 'none'
+    saveBtn.disabled = true
+    resetBtn.disabled = true
+
+    const file = e.target.files[0]
+    if (!file) return
+    const form = new FormData()
+    form.append('image', file)
+    const res = await fetch('/upload', { method: 'POST', body: form })
+    const data = await res.json()
+    if (!data.ok) { alert('Upload failed'); return }
+
+    uploadedFilename = data.filename
+    origImg.src = data.url
+    setDefaults()
+    await updatePreview()
+    saveBtn.disabled = false
+    resetBtn.disabled = false
+  })
+
+  // Listeners for ALL sliders (single-op + hybrid)
+  ;[gSlider, bSlider, cSlider, sSlider, vSlider, hgSlider, hsSlider, hbSlider, hcSlider, hvSlider]
+    .forEach((sl) => sl.addEventListener('input', updatePreview))
+
+  // Edges live update
+  ;[eTSlider, eSSlider, eASlider, eColor].forEach((el) => el.addEventListener('input', updatePreview))
+  ;[eKind, eOverlay].forEach((el) => el.addEventListener('change', updatePreview))
+
+  // LPF/HPF sliders live-update
+  ;[lpfCutSlider, hpfCutSlider, hpfBoostSlider].forEach((el) => el.addEventListener('input', updatePreview))
+
+  // DCT sliders live-update
+  ;[dctMethod, dctQualSlider, dctKeepSlider, dctBlock].forEach(el =>
+    el.addEventListener('input', () => {
+      const m = dctMethod.value
+      const isJPEG = (m === 'jpeg')
+      dctQualWrap.classList.toggle('hidden', !isJPEG)
+      dctKeepWrap.classList.toggle('hidden', isJPEG)
+
+      dctQualLabel.textContent = dctQualSlider.value
+      dctKeepLabel.textContent = Number(dctKeepSlider.value).toFixed(2)
+      updatePreview()
+    })
+  )
+
+  // Mode buttons
+  modeBtns.grayscale.addEventListener('click', () => setMode('grayscale'))
+  modeBtns.brightness.addEventListener('click', () => setMode('brightness'))
+  modeBtns.contrast.addEventListener('click', () => setMode('contrast'))
+  modeBtns.blur.addEventListener('click', () => setMode('blur'))
+  modeBtns.hybrid.addEventListener('click', () => setMode('hybrid'))
+  modeBtns.vignette.addEventListener('click', () => setMode('vignette'))
+  modeBtns.edges.addEventListener('click', () => setMode('edges'))
+  modeBtns.lowpass.addEventListener('click', () => setMode('lowpass'))
+  modeBtns.highpass.addEventListener('click', () => setMode('highpass'))
+  modeBtns.dct.addEventListener('click', () => setMode('dct'))
+
+  // Reset: neutralize and show original, switch to Hybrid (neutral)
+  resetBtn.addEventListener('click', () => {
+    if (!uploadedFilename) return
+    setDefaults()
+    preview.src = origImg.src
+    setMode('hybrid')
+  })
+
+  // Save
+  saveBtn.addEventListener('click', async () => {
+    if (!uploadedFilename) return
+    let payload = { filename: uploadedFilename, op: mode }
+
+    if (mode === 'grayscale') {
+      payload.strength = parseInt(gSlider.value, 10)
+
+    } else if (mode === 'brightness') {
+      payload.brightness = parseInt(bSlider.value, 10)
+
+    } else if (mode === 'contrast') {
+      payload.contrast = parseInt(cSlider.value, 10)
+
+    } else if (mode === 'blur') {
+      payload.sigma = parseFloat(sSlider.value)
+
+    } else if (mode === 'vignette') {
+      payload.op = 'vignette'
+      payload.strength = parseFloat(vSlider.value)
+
+    } else if (mode === 'edges') {
+      payload.op = 'edges'
+      payload.kind = eKind.value
+      payload.threshold = parseInt(eTSlider.value, 10)
+      payload.smooth_sigma = parseFloat(eSSlider.value)
+      payload.overlay = !!eOverlay.checked
+      payload.overlay_alpha = parseFloat(eASlider.value)
+      payload.overlay_color = hexToRGB(eColor.value)
+
+    } else if (mode === 'lowpass') {
+      payload.op = 'lowpass'
+      payload.cutoff = parseFloat(lpfCutSlider.value)
+
+    } else if (mode === 'highpass') {
+      payload.op = 'highpass'
+      payload.cutoff = parseFloat(hpfCutSlider.value)
+      payload.highboost = parseFloat(hpfBoostSlider.value)
+
+    } else if (mode === 'hybrid') {
+      payload.op = 'pipeline'
+      payload.grayscale_strength = parseInt(hgSlider.value, 10)
+      payload.blur_sigma = parseFloat(hsSlider.value)
+      payload.brightness = parseInt(hbSlider.value, 10)
+      payload.contrast = parseInt(hcSlider.value, 10)
+      payload.vignette_strength = parseFloat(hvSlider.value)
+
+    } else if (mode === 'dct') {
+      payload.op = 'dct'
+      const m = dctMethod.value
+      payload.method = m
+      if (m === 'jpeg') {
+        payload.quality = parseInt(dctQualSlider.value, 10)
+      } else {
+        payload.keep = parseFloat(dctKeepSlider.value)
+        payload.block = parseInt(dctBlock.value, 10)
+      }
+    }
+
+    try {
+      const res = await postJSON('/save', payload)
+      const data = await res.json()
+      if (data.ok) {
+        dlLink.href = data.result_url
+        dlLink.style.display = 'inline-block'
+        dlLink.textContent = 'Download Edited Image'
+      }
+    } catch (e) {
+      console.error('Save failed:', e)
+    }
+  })
+
+  setDefaults()
+</script>
+
+  </body>
 </html>
