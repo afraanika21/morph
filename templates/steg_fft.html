@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MORPH – Steganography (FFT)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 24px;
+    }
+
+    .panel {
+      max-width: 960px;
+      margin: 0 auto;
+      display: grid;
+      gap: 20px;
+    }
+
+    .row {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr;
+    }
+
+    .canvas {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    img {
+      width: 100%;
+      height: auto;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 80px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: inherit;
+    }
+
+    input[type='range'] {
+      width: 100%;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: #f7f7f7;
+      cursor: pointer;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 900px) {
+      .canvas {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>MORPH: Steganography with FFT</h2>
+
+    <!-- Upload -->
+    <div class="row">
+      <div class="controls">
+        <label>Upload a cover image:
+          <input id="file" type="file" accept="image/png,image/jpeg,image/webp" />
+        </label>
+        <div class="hint">This image will be used to hide your secret text.</div>
+      </div>
+    </div>
+
+    <!-- Parameters -->
+    <div class="row">
+      <div class="controls">
+        <label>Strength Factor: <span id="strengthLabel">0.05</span></label>
+        <input id="strengthSlider" type="range" min="0.01" max="0.9" step="0.01" value="0.05" />
+        <div class="hint">Higher = stronger embedding but more distortion.</div>
+
+        <label>Embed Region Ratio: <span id="regionLabel">0.30</span></label>
+        <input id="regionSlider" type="range" min="0.1" max="0.9" step="0.05" value="0.30" />
+        <div class="hint">Fraction of FFT radius used for hiding bits.</div>
+
+        <label>Repetition (n): <span id="repeatLabel">3</span></label>
+        <input id="repeatSlider" type="range" min="1" max="8" step="1" value="3" />
+        <div class="hint">Repeat bits for robustness. Larger n = fewer max characters.</div>
+      </div>
+    </div>
+
+    <!-- Secret Message -->
+    <div class="row">
+      <div class="controls">
+        <label>Secret Message:</label>
+        <textarea id="secret" placeholder="Enter secret text here..."></textarea>
+        <button id="embedBtn" class="btn">Embed Text</button>
+      </div>
+    </div>
+
+    <!-- Original & Stego -->
+    <div class="row canvas">
+      <div>
+        <h3>Original</h3>
+        <img id="orig" alt="original" />
+        <a id="downloadOrig" class="btn" href="#" download style="display:none;">Download Original</a>
+      </div>
+      <div>
+        <h3>Stego</h3>
+        <img id="steg" alt="stego" />
+        <a id="downloadSteg" class="btn" href="#" download style="display:none;">Download Stego</a>
+      </div>
+    </div>
+
+    <!-- Extraction -->
+    <div class="row">
+      <div class="controls">
+        <button id="extractBtn" class="btn">Extract Message</button>
+        <p><b>Extracted:</b> <span id="output"></span></p>
+      </div>
+    </div>
+  </div>
+
+<script>
+let origFile = null, stegFile = null;
+
+function updateLabels() {
+  document.getElementById("strengthLabel").textContent = strengthSlider.value;
+  document.getElementById("regionLabel").textContent = regionSlider.value;
+  document.getElementById("repeatLabel").textContent = repeatSlider.value;
+}
+[strengthSlider, regionSlider, repeatSlider].forEach(sl => sl.addEventListener("input", updateLabels));
+
+async function safeJSON(res) {
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch { throw new Error(text); }
+}
+
+// Upload
+document.getElementById('file').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const form = new FormData();
+  form.append("image", f);
+
+  try {
+    const res = await fetch("/upload", { method: "POST", body: form });
+    const data = await safeJSON(res);
+    if (!data.ok) throw new Error(data.error || "Upload failed");
+
+    origFile = data.filename;
+    document.getElementById("orig").src = data.url;
+    document.getElementById("downloadOrig").href = data.url;
+    document.getElementById("downloadOrig").style.display = "inline-block";
+  } catch (e) {
+    alert("Upload failed: " + e.message);
+  }
+});
+
+// Embed
+document.getElementById("embedBtn").addEventListener("click", async () => {
+  if (!origFile) return alert("Upload an image first!");
+  const text = document.getElementById("secret").value;
+
+  const payload = {
+    filename: origFile,
+    text,
+    strength: parseFloat(strengthSlider.value),
+    embed_ratio: parseFloat(regionSlider.value),
+    repeat_n: parseInt(repeatSlider.value)
+  };
+
+  try {
+    const res = await fetch("/stegfft/embed", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await safeJSON(res);
+    if (!data.ok) throw new Error(data.error || "Embedding failed");
+
+    stegFile = data.steg_url.split("/").pop();
+    document.getElementById("steg").src = data.steg_url;
+    document.getElementById("downloadSteg").href = data.steg_url;
+    document.getElementById("downloadSteg").style.display = "inline-block";
+  } catch (e) {
+    alert("Embed failed: " + e.message);
+  }
+});
+
+// Extract
+document.getElementById("extractBtn").addEventListener("click", async () => {
+  if (!origFile || !stegFile) return alert("Need both original and stego images!");
+
+  try {
+    const res = await fetch("/stegfft/extract", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orig_filename: origFile, steg_filename: stegFile })
+    });
+    const data = await safeJSON(res);
+    if (!data.ok) throw new Error(data.error || "Extraction failed");
+
+    document.getElementById("output").textContent = data.message;
+  } catch (e) {
+    alert("Extract failed: " + e.message);
+  }
+});
+</script>
+</body>
+</html>
