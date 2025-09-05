@@ -217,7 +217,7 @@ def apply_dct_keep(np_rgb: np.ndarray, keep: float = 0.125, block: int = 8,
     return np.clip(out, 0.0, 255.0).astype(np.float32)
 
 # -----------------------------
-# 6) (Optional) PSNR metric
+# 6) PSNR metric
 # -----------------------------
 def psnr(orig: np.ndarray, comp: np.ndarray) -> float:
     """Peak SNR in dB for 8-bit images. Returns +inf if identical."""

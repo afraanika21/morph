@@ -3,6 +3,7 @@ from config import Config
 from routes.images import bp as images_bp
 from routes.steg_fft import bp_steg_fft
 from routes.blind_steg_route import bp_blind
+from routes.noise import bp_noise
 import os
 
 def create_app():
@@ -17,6 +18,7 @@ def create_app():
     app.register_blueprint(images_bp)
     app.register_blueprint(bp_steg_fft)
     app.register_blueprint(bp_blind)
+    app.register_blueprint(bp_noise)
 
     return app
 

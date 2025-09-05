@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MORPH – Noise Lab</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    .panel { max-width: 960px; margin: 0 auto; display: grid; gap: 20px; }
+    .row { display: grid; gap: 12px; grid-template-columns: 1fr; }
+    .canvas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    img { width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
+    .controls { display: grid; gap: 8px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn { padding: 10px 14px; border-radius: 8px; border: 1px solid #ccc; background: #f7f7f7; cursor: pointer; }
+    .btn.active { background: #e8f0fe; border-color: #6c8cff; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .hint { color: #666; font-size: 0.9rem; }
+    .hidden { display: none; }
+    input[type="range"] { width: 100%; }
+    .row-inline { display:flex; align-items:center; gap:8px; flex-wrap: wrap;}
+    select, input[type="number"], input[type="text"] { padding:8px; border:1px solid #ddd; border-radius:6px; font-family:inherit; }
+    @media (max-width: 900px) { .canvas { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="panel">
+
+    <h2>MORPH: Noise Lab (Add Noise • Denoise • Metrics)</h2>
+
+    <!-- Upload -->
+    <div class="row">
+      <div class="controls">
+        <label>Upload an image (png/jpg/webp):
+          <input id="file" type="file" accept="image/png,image/jpeg,image/webp" />
+        </label>
+        <div class="hint" id="imgInfo"></div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="row">
+      <div class="toolbar">
+        <button class="btn active" id="tab-noise">Add Noise</button>
+        <button class="btn" id="tab-denoise">Denoise</button>
+        <button class="btn" id="tab-metrics">Metrics</button>
+      </div>
+    </div>
+
+    <!-- Canvases -->
+    <div class="row canvas">
+      <div>
+        <h3>Original</h3>
+        <img id="orig" alt="original" />
+      </div>
+      <div>
+        <h3>Preview</h3>
+        <img id="preview" alt="preview" />
+      </div>
+    </div>
+
+    <!-- Panels -->
+    <div class="row">
+
+      <!-- Add Noise -->
+      <div id="panel-noise" class="controls">
+        <label>Noise Type:
+          <select id="noiseType">
+            <option value="awgn">AWGN</option>
+            <option value="sp">Salt & Pepper</option>
+            <option value="speckle">Speckle</option>
+            <option value="poisson">Poisson</option>
+          </select>
+        </label>
+
+        <div id="awgnCtrls">
+          <label>σ (0–50): <span id="awgnSigmaLbl">20</span></label>
+          <input id="awgnSigma" type="range" min="0" max="50" step="1" value="20" />
+          <label>Seed (optional): <input id="awgnSeed" type="text" placeholder="e.g. 42" /></label>
+        </div>
+
+        <div id="spCtrls" class="hidden">
+          <label>p (0–0.20): <span id="spProbLbl">0.02</span></label>
+          <input id="spProb" type="range" min="0" max="0.20" step="0.01" value="0.02" />
+        </div>
+
+        <div id="speckleCtrls" class="hidden">
+          <label>σ (0–1.0): <span id="speckleSigmaLbl">0.15</span></label>
+          <input id="speckleSigma" type="range" min="0" max="1" step="0.01" value="0.15" />
+        </div>
+
+        <div id="poissonCtrls" class="hidden">
+          <label>Scale (1–30): <span id="poisScaleLbl">12</span></label>
+          <input id="poisScale" type="range" min="1" max="30" step="1" value="12" />
+        </div>
+
+        <div class="row-inline">
+          <button class="btn" id="previewNoiseBtn">Preview Noise</button>
+          <button class="btn" id="commitNoiseBtn">Commit as Noisy</button>
+          <a id="downloadNoisy" class="btn" style="display:none;" download>Download Noisy</a>
+        </div>
+      </div>
+
+      <!-- Denoise -->
+      <div id="panel-denoise" class="controls hidden">
+        <label>Denoiser:
+          <select id="denoiser">
+            <option value="ma">Moving Average (box)</option>
+            <option value="median">Median</option>
+          </select>
+        </label>
+
+        <div id="maCtrls">
+          <label>Kernel (odd): <span id="maKLbl">3</span></label>
+          <input id="maK" type="range" min="1" max="11" step="2" value="3" />
+        </div>
+
+        <div id="medianCtrls" class="hidden">
+          <label>Kernel (odd): <span id="medianKLbl">3</span></label>
+          <input id="medianK" type="range" min="1" max="11" step="2" value="3" />
+        </div>
+
+        <div class="row-inline">
+          <button class="btn" id="previewDenoiseBtn" disabled>Preview Denoised</button>
+          <button class="btn" id="commitDenoiseBtn" disabled>Commit Denoised</button>
+          <a id="downloadDenoised" class="btn" style="display:none;" download>Download Denoised</a>
+        </div>
+        <div class="hint" id="denHint">Commit a noisy image first.</div>
+      </div>
+
+      <!-- Metrics -->
+      <div id="panel-metrics" class="controls hidden">
+        <div class="row-inline">
+          <button class="btn" id="metricsNoisyBtn" disabled>Original vs Noisy</button>
+          <button class="btn" id="metricsDenoisedBtn" disabled>Original vs Denoised</button>
+        </div>
+        <div id="metricsOut" class="hint"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let uploadedFilename = null;     // in uploads/
+let noisyFilename = null;        // saved in results/
+let denoisedFilename = null;     // saved in results/
+
+// DOM
+const fileInput = document.getElementById('file');
+const orig = document.getElementById('orig');
+const preview = document.getElementById('preview');
+const imgInfo = document.getElementById('imgInfo');
+
+const tabNoise = document.getElementById('tab-noise');
+const tabDenoise = document.getElementById('tab-denoise');
+const tabMetrics = document.getElementById('tab-metrics');
+const panelNoise = document.getElementById('panel-noise');
+const panelDenoise = document.getElementById('panel-denoise');
+const panelMetrics = document.getElementById('panel-metrics');
+
+// Noise controls
+const noiseType = document.getElementById('noiseType');
+const awgnSigma = document.getElementById('awgnSigma');
+const awgnSigmaLbl = document.getElementById('awgnSigmaLbl');
+const awgnSeed = document.getElementById('awgnSeed');
+
+const spProb = document.getElementById('spProb');
+const spProbLbl = document.getElementById('spProbLbl');
+
+const speckleSigma = document.getElementById('speckleSigma');
+const speckleSigmaLbl = document.getElementById('speckleSigmaLbl');
+
+const poisScale = document.getElementById('poisScale');
+const poisScaleLbl = document.getElementById('poisScaleLbl');
+
+const awgnCtrls = document.getElementById('awgnCtrls');
+const spCtrls = document.getElementById('spCtrls');
+const speckleCtrls = document.getElementById('speckleCtrls');
+const poissonCtrls = document.getElementById('poissonCtrls');
+
+const previewNoiseBtn = document.getElementById('previewNoiseBtn');
+const commitNoiseBtn = document.getElementById('commitNoiseBtn');
+const downloadNoisy = document.getElementById('downloadNoisy');
+
+// Denoise controls
+const denoiser = document.getElementById('denoiser');
+const maK = document.getElementById('maK'); const maKLbl = document.getElementById('maKLbl');
+const medianK = document.getElementById('medianK'); const medianKLbl = document.getElementById('medianKLbl');
+
+const previewDenoiseBtn = document.getElementById('previewDenoiseBtn');
+const commitDenoiseBtn = document.getElementById('commitDenoiseBtn');
+const downloadDenoised = document.getElementById('downloadDenoised');
+const denHint = document.getElementById('denHint');
+
+// Metrics
+const metricsNoisyBtn = document.getElementById('metricsNoisyBtn');
+const metricsDenoisedBtn = document.getElementById('metricsDenoisedBtn');
+const metricsOut = document.getElementById('metricsOut');
+
+function setTab(which) {
+  [tabNoise, tabDenoise, tabMetrics].forEach(b => b.classList.remove('active'));
+  [panelNoise, panelDenoise, panelMetrics].forEach(p => p.classList.add('hidden'));
+  if (which === 'noise') { tabNoise.classList.add('active'); panelNoise.classList.remove('hidden'); }
+  if (which === 'denoise') { tabDenoise.classList.add('active'); panelDenoise.classList.remove('hidden'); }
+  if (which === 'metrics') { tabMetrics.classList.add('active'); panelMetrics.classList.remove('hidden'); }
+}
+tabNoise.onclick = () => setTab('noise');
+tabDenoise.onclick = () => setTab('denoise');
+tabMetrics.onclick = () => setTab('metrics');
+
+function showNoiseCtrls() {
+  const n = noiseType.value;
+  awgnCtrls.classList.toggle('hidden', n !== 'awgn');
+  spCtrls.classList.toggle('hidden', n !== 'sp');
+  speckleCtrls.classList.toggle('hidden', n !== 'speckle');
+  poissonCtrls.classList.toggle('hidden', n !== 'poisson');
+}
+noiseType.addEventListener('change', showNoiseCtrls);
+
+// Upload
+fileInput.addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const form = new FormData();
+  form.append('image', f);
+  const res = await fetch('/upload', { method: 'POST', body: form });
+  const data = await res.json();
+  if (!data.ok) { alert('Upload failed'); return; }
+  uploadedFilename = data.filename;
+  orig.src = data.url;
+  preview.src = data.url;
+  imgInfo.textContent = '';
+  noisyFilename = null; denoisedFilename = null;
+  previewDenoiseBtn.disabled = true;
+  commitDenoiseBtn.disabled = true;
+  metricsNoisyBtn.disabled = true;
+  metricsDenoisedBtn.disabled = true;
+  downloadNoisy.style.display = 'none';
+  downloadDenoised.style.display = 'none';
+});
+
+// Sliders labels
+awgnSigma.addEventListener('input', () => awgnSigmaLbl.textContent = awgnSigma.value);
+spProb.addEventListener('input', () => spProbLbl.textContent = spProb.value);
+speckleSigma.addEventListener('input', () => speckleSigmaLbl.textContent = speckleSigma.value);
+poisScale.addEventListener('input', () => poisScaleLbl.textContent = poisScale.value);
+
+maK.addEventListener('input', () => maKLbl.textContent = maK.value);
+medianK.addEventListener('input', () => medianKLbl.textContent = medianK.value);
+
+// Preview noise
+previewNoiseBtn.addEventListener('click', async () => {
+  if (!uploadedFilename) return alert('Upload first');
+  const ntype = noiseType.value;
+  const payload = { filename: uploadedFilename, type: ntype };
+  if (ntype === 'awgn') { payload.sigma = parseFloat(awgnSigma.value); payload.seed = awgnSeed.value || null; }
+  if (ntype === 'sp') { payload.p = parseFloat(spProb.value); }
+  if (ntype === 'speckle') { payload.speckle_sigma = parseFloat(speckleSigma.value); }
+  if (ntype === 'poisson') { payload.poisson_scale = parseFloat(poisScale.value); }
+
+  const res = await fetch('/noise/add', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) { alert('Preview failed'); return; }
+  const blob = await res.blob();
+  preview.src = URL.createObjectURL(blob);
+});
+
+// Commit noisy
+commitNoiseBtn.addEventListener('click', async () => {
+  if (!uploadedFilename) return alert('Upload first');
+  const ntype = noiseType.value;
+  const payload = { filename: uploadedFilename, type: ntype };
+  if (ntype === 'awgn') { payload.sigma = parseFloat(awgnSigma.value); payload.seed = awgnSeed.value || null; }
+  if (ntype === 'sp') { payload.p = parseFloat(spProb.value); }
+  if (ntype === 'speckle') { payload.speckle_sigma = parseFloat(speckleSigma.value); }
+  if (ntype === 'poisson') { payload.poisson_scale = parseFloat(poisScale.value); }
+
+  const res = await fetch('/noise/add?commit=1', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!data.ok) { alert(data.error || 'Commit failed'); return; }
+  noisyFilename = data.noisy_filename;
+  preview.src = data.noisy_url;
+  downloadNoisy.href = data.noisy_url;
+  downloadNoisy.style.display = 'inline-block';
+  // enable denoise & metrics
+  previewDenoiseBtn.disabled = false;
+  commitDenoiseBtn.disabled = false;
+  metricsNoisyBtn.disabled = false;
+});
+
+// Denoiser panel switching
+function showDenoiserCtrls() {
+  const m = denoiser.value;
+  document.getElementById('maCtrls').classList.toggle('hidden', m !== 'ma');
+  document.getElementById('medianCtrls').classList.toggle('hidden', m !== 'median');
+}
+denoiser.addEventListener('change', showDenoiserCtrls);
+
+// Preview denoise
+previewDenoiseBtn.addEventListener('click', async () => {
+  if (!noisyFilename) return alert('Commit a noisy image first');
+  const method = denoiser.value;
+  const payload = { source_filename: noisyFilename, method };
+  if (method === 'ma') payload.k = parseInt(maK.value, 10);
+  if (method === 'median') payload.k = parseInt(medianK.value, 10);
+
+  const res = await fetch('/noise/denoise', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) { alert('Preview failed'); return; }
+  const blob = await res.blob();
+  preview.src = URL.createObjectURL(blob);
+});
+
+// Commit denoise
+commitDenoiseBtn.addEventListener('click', async () => {
+  if (!noisyFilename) return alert('Commit a noisy image first');
+  const method = denoiser.value;
+  const payload = { source_filename: noisyFilename, method };
+  if (method === 'ma') payload.k = parseInt(maK.value, 10);
+  if (method === 'median') payload.k = parseInt(medianK.value, 10);
+
+  const res = await fetch('/noise/denoise?commit=1', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!data.ok) { alert(data.error || 'Commit failed'); return; }
+  denoisedFilename = data.denoised_filename;
+  preview.src = data.denoised_url;
+  downloadDenoised.href = data.denoised_url;
+  downloadDenoised.style.display = 'inline-block';
+  metricsDenoisedBtn.disabled = false;
+  denHint.textContent = '';
+});
+
+// Metrics
+async function fetchMetrics(refWhere, refFile, testWhere, testFile) {
+  const res = await fetch('/noise/metrics', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      ref: { where: refWhere, filename: refFile },
+      test:{ where: testWhere, filename: testFile }
+    })
+  });
+  const data = await res.json();
+  if (!data.ok) { alert(data.error || 'Metrics failed'); return; }
+  metricsOut.textContent = `PSNR: ${data.psnr.toFixed(2)} dB,  SSIM: ${data.ssim.toFixed(4)}`;
+}
+
+metricsNoisyBtn.addEventListener('click', () => {
+  if (!uploadedFilename || !noisyFilename) return;
+  fetchMetrics('uploads', uploadedFilename, 'results', noisyFilename);
+});
+
+metricsDenoisedBtn.addEventListener('click', () => {
+  if (!uploadedFilename || !denoisedFilename) return;
+  fetchMetrics('uploads', uploadedFilename, 'results', denoisedFilename);
+});
+
+// init
+showNoiseCtrls();
+showDenoiserCtrls();
+</script>
+</body>
+</html>
