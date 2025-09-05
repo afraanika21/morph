@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MORPH – Blind Steganography (FFT)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    .panel { max-width: 960px; margin: 0 auto; display: grid; gap: 20px; }
+    .row { display: grid; gap: 12px; grid-template-columns: 1fr; }
+    .canvas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    img { width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
+    .controls { display: grid; gap: 8px; }
+    input[type='range'] { width: 100%; }
+    .btn { padding: 10px 14px; border-radius: 8px; border: 1px solid #ccc; background: #f7f7f7; cursor: pointer; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .hint { color: #666; font-size: 0.9rem; }
+    .row-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .input { padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; width: 100%; max-width: 360px; }
+    textarea { width: 100%; height: 84px; border: 1px solid #ddd; border-radius: 6px; padding: 8px; font-family: inherit; }
+    @media (max-width: 900px) { .canvas { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>MORPH: Blind Steganography (FFT)</h2>
+
+    <!-- Upload COVER for embedding -->
+    <div class="row">
+      <div class="controls">
+        <label>Upload cover image (to EMBED):
+          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" />
+        </label>
+        <div class="hint">Use this to create a stego image. For extraction only, use the “Load stego image” input below.</div>
+      </div>
+    </div>
+
+    <!-- Load existing STEGO for extraction-only flow -->
+    <div class="row">
+      <div class="controls">
+        <label>Load an existing stego image (to EXTRACT):
+          <input id="stegFileInput" type="file" accept="image/png,image/jpeg,image/webp" />
+        </label>
+        <div class="hint">This uploads your stego PNG/JPG so you can extract the message with your key — no cover image needed.</div>
+      </div>
+    </div>
+
+    <!-- Parameters -->
+    <div class="row">
+      <div class="controls">
+        <div class="row-inline">
+          <label style="min-width:160px;">Key (secret):</label>
+          <input id="keyInput" class="input" type="password" placeholder="enter a passphrase" />
+        </div>
+
+        <label>Quantization Step (QIM): <span id="stepLabel">0.10</span></label>
+        <input id="stepSlider" type="range" min="0.02" max="0.25" step="0.01" value="0.10" />
+        <div class="hint">Higher step → more robust but potentially more visible.</div>
+
+        <label>Embed Band (thickness): <span id="bandLabel">0.50</span></label>
+        <input id="bandSlider" type="range" min="0.10" max="0.90" step="0.05" value="0.50" />
+        <div class="hint">Fraction of radius used for a mid-band annulus. Outer edge is fixed; this controls thickness.</div>
+
+        <label>Repetition (n): <span id="repLabel">3</span></label>
+        <input id="repSlider" type="range" min="1" max="5" step="1" value="3" />
+        <div class="hint">More repetition = stronger decode, lower capacity.</div>
+
+        <div class="hint" id="capHint">Max capacity: –</div>
+      </div>
+    </div>
+
+    <!-- Message + Embed -->
+    <div class="row">
+      <div class="controls">
+        <label>Secret Message (for embedding):</label>
+        <textarea id="secretInput" placeholder="Enter secret text..."></textarea>
+        <button id="embedBtn" class="btn">Embed (Blind)</button>
+      </div>
+    </div>
+
+    <!-- Original & Stego -->
+    <div class="row canvas">
+      <div>
+        <h3>Original (cover)</h3>
+        <img id="origImg" alt="original" />
+        <a id="downloadOrig" class="btn" href="#" download style="display:none;">Download Original</a>
+      </div>
+      <div>
+        <h3>Stego</h3>
+        <img id="stegImg" alt="stego" />
+        <a id="downloadSteg" class="btn" href="#" download style="display:none;">Download Stego</a>
+      </div>
+    </div>
+
+    <!-- Extraction -->
+    <div class="row">
+      <div class="controls">
+        <button id="extractBtn" class="btn">Extract (Blind)</button>
+        <p><b>Extracted:</b> <span id="output"></span></p>
+      </div>
+    </div>
+  </div>
+
+<script>
+let origFile = null;         // filename in UPLOAD_DIR
+let stegFile = null;         // filename in RESULTS or UPLOADS
+let stegFromUploads = false; // true if user loaded a saved stego via the "Load stego" input
+
+// Cache DOM refs
+const fileInput     = document.getElementById("fileInput");
+const stegFileInput = document.getElementById("stegFileInput");
+const keyInput      = document.getElementById("keyInput");
+const secretInput   = document.getElementById("secretInput");
+const origImg       = document.getElementById("origImg");
+const stegImg       = document.getElementById("stegImg");
+const downloadOrig  = document.getElementById("downloadOrig");
+const downloadSteg  = document.getElementById("downloadSteg");
+const outputEl      = document.getElementById("output");
+
+const stepSlider = document.getElementById("stepSlider");
+const bandSlider = document.getElementById("bandSlider");
+const repSlider  = document.getElementById("repSlider");
+const stepLabel  = document.getElementById("stepLabel");
+const bandLabel  = document.getElementById("bandLabel");
+const repLabel   = document.getElementById("repLabel");
+const capHint    = document.getElementById("capHint");
+
+// ---- UI helpers ----
+function updateLabels() {
+  stepLabel.textContent = Number(stepSlider.value).toFixed(2);
+  bandLabel.textContent = Number(bandSlider.value).toFixed(2);
+  repLabel.textContent  = repSlider.value;
+  updateCapacityHint();
+}
+[stepSlider, bandSlider, repSlider].forEach(sl => sl.addEventListener("input", updateLabels));
+
+function approxCapacityChars(w, h, embedRatio, repeatN) {
+  // Very rough: annulus area / 2 (conjugate symmetry) / (8*repeatN) minus overhead
+  const cx = Math.floor(h/2), cy = Math.floor(w/2);
+  const maxd = Math.sqrt(cx*cx + cy*cy);
+  const rHigh = 0.88;
+  const thickness = Math.min(0.7, Math.max(0.05, embedRatio));
+  const rLow = Math.max(0.05, rHigh - thickness);
+  const area = Math.PI * ((rHigh*maxd)**2 - (rLow*maxd)**2);
+  const usable = area / 2;
+  const overheadBits = (13 + 32) * repeatN; // SYNC(13) + LEN(32)
+  const payloadBits = Math.max(0, usable - overheadBits);
+  return Math.floor(payloadBits / (8 * repeatN));
+}
+
+function updateCapacityHint() {
+  if (!origImg.naturalWidth || !origImg.naturalHeight) {
+    capHint.textContent = "Max capacity: –";
+    return;
+  }
+  const maxChars = approxCapacityChars(
+    origImg.naturalWidth,
+    origImg.naturalHeight,
+    parseFloat(bandSlider.value),
+    parseInt(repSlider.value, 10)
+  );
+  capHint.textContent = `Max capacity (approx): ${maxChars} chars`;
+}
+
+async function safeJSON(res) {
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch { throw new Error(text); }
+}
+
+// ---- Upload COVER (for embedding) ----
+fileInput.addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const form = new FormData();
+  form.append("image", f);
+  try {
+    const res = await fetch("/upload", { method: "POST", body: form });
+    const data = await safeJSON(res);
+    if (!data.ok) throw new Error(data.error || "Upload failed");
+
+    origFile = data.filename;           // lives in UPLOAD_DIR
+    origImg.src = data.url;
+    downloadOrig.href = data.url;
+    downloadOrig.style.display = "inline-block";
+    setTimeout(updateCapacityHint, 50);
+  } catch (err) {
+    alert("Upload failed: " + err.message);
+  }
+});
+
+// ---- Load existing STEGO (for extraction-only) ----
+stegFileInput.addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+
+  const form = new FormData();
+  form.append("image", f);
+
+  try {
+    const res = await fetch("/upload", { method: "POST", body: form });
+    const data = await safeJSON(res);
+    if (!data.ok) throw new Error(data.error || "Upload failed");
+
+    stegFile = data.filename;        // stored in UPLOAD_DIR
+    stegFromUploads = true;
+    stegImg.src = data.url;
+    downloadSteg.href = data.url;
+    downloadSteg.style.display = "inline-block";
+  } catch (err) {
+    alert("Stego upload failed: " + err.message);
+  }
+});
+
+// ---- Embed (blind) ----
+document.getElementById("embedBtn").addEventListener("click", async () => {
+  if (!origFile) return alert("Upload a cover image first.");
+  const text = secretInput.value || "";
+  const passKey = keyInput.value;
+  if (!passKey) return alert("Enter a key (passphrase).");
+
+  const payload = {
+    filename: origFile,
+    text,
+    key: passKey,
+    repeat_n: parseInt(repSlider.value, 10),
+    embed_ratio: parseFloat(bandSlider.value),
+    step: parseFloat(stepSlider.value)
+  };
+
+  try {
+    const res = await fetch("/blind/embed", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+    const data = await safeJSON(res);
+    if (!data.ok) throw new Error(data.error || "Embedding failed");
+
+    // stego created by backend in RESULT_DIR
+    stegFile = data.steg_url.split("/").pop();
+    stegFromUploads = false;
+
+    stegImg.src = data.steg_url;
+    downloadSteg.href = data.steg_url;
+    downloadSteg.style.display = "inline-block";
+  } catch (e) {
+    alert("Embed failed: " + e.message);
+  }
+});
+
+// ---- Extract (blind) ----
+document.getElementById("extractBtn").addEventListener("click", async () => {
+  if (!stegFile) return alert("No stego image yet. Embed first or load a saved stego image.");
+  const passKey = keyInput.value;
+  if (!passKey) return alert("Enter the same key used for embedding.");
+
+  const payload = {
+    steg_filename: stegFile,
+    steg_source: stegFromUploads ? "uploads" : "results",
+    key: passKey,
+    repeat_n: parseInt(repSlider.value, 10),
+    embed_ratio: parseFloat(bandSlider.value),
+    step: parseFloat(stepSlider.value)
+  };
+
+  try {
+    const res = await fetch("/blind/extract", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+    const data = await safeJSON(res);
+
+    if (data.ok) {
+      outputEl.textContent = data.message || "";
+    } else {
+      outputEl.textContent = data.message || "";
+      const reason = data.error || "unknown";
+      console.warn("Partial/failed blind decode:", reason);
+      alert("Extraction failed:\n" + reason);
+    }
+  } catch (e) {
+    alert("Extract failed: " + e.message);
+  }
+});
+
+// Initialize labels on load
+updateLabels();
+</script>
+</body>
+</html>
